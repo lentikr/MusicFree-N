@@ -281,7 +281,7 @@ class MusicFreePluginRuntime(private val context: Context) {
         type: String = "music"
     ): SearchResult = engineMutex.withLock {
         val engine = ensureEngine()
-        appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.search("$query", $page, "$type")")
+        appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.search('$query', $page, '$type')")
         val raw = engine.evaluate<String>(
             "globalThis.__mf_search(${json.encodeToString(plugin.id)}, ${json.encodeToString(query)}, $page, ${json.encodeToString(type)})"
         )
@@ -311,7 +311,7 @@ class MusicFreePluginRuntime(private val context: Context) {
         quality: String = "standard"
     ): MediaSourceResult = engineMutex.withLock {
         val engine = ensureEngine()
-        appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.getMediaSource("${item.title}", "$quality")")
+        appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.getMediaSource('${item.title}', '$quality')")
         val raw = engine.evaluate<String>(
             "globalThis.__mf_getMediaSource(${json.encodeToString(plugin.id)}, ${json.encodeToString(item.rawJson)}, ${json.encodeToString(quality)})"
         )
@@ -336,7 +336,7 @@ class MusicFreePluginRuntime(private val context: Context) {
         item: MusicItem
     ): LyricResult = engineMutex.withLock {
         val engine = ensureEngine()
-        appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.getLyric("${item.title}")")
+        appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.getLyric('${item.title}')")
         val raw = engine.evaluate<String>(
             "globalThis.__mf_getLyric(${json.encodeToString(plugin.id)}, ${json.encodeToString(item.rawJson)})"
         )
