@@ -2,6 +2,7 @@ package com.musicfree.demo.plugin.runtime
 
 import android.content.Context
 import com.dokar.quickjs.QuickJs
+import com.dokar.quickjs.binding.define
 import com.musicfree.demo.plugin.model.LogLevel
 import com.musicfree.demo.plugin.model.LyricResult
 import com.musicfree.demo.plugin.model.MediaSourceResult
@@ -274,6 +275,33 @@ class MusicFreePluginRuntime(private val context: Context) {
         appendLog(LogLevel.INFO, "Plugin", "已移除插件 $pluginId")
     }
 
+
+    /**
+     * 安全执行返回 Promise 的 JS 异步调用，等待所有微任务与原生协程完成后再同步读取结果字符串，
+     * 避免 QuickJS 直接把 Promise 对象序列化为 "Promise { <state>: \"fulfilled\" }"。
+     */
+    private suspend fun evalAsyncJson(engine: QuickJs, asyncCallExpr: String): String {
+        engine.evaluate<Any?>(
+            """
+            globalThis.__mf_lastResult = "";
+            globalThis.__mf_lastError = "";
+            (async () => {
+              try {
+                const __res = await ($asyncCallExpr);
+                globalThis.__mf_lastResult = typeof __res === "string" ? __res : JSON.stringify(__res ?? {});
+              } catch (e) {
+                globalThis.__mf_lastError = (e && e.message) ? String(e.message) : String(e);
+              }
+            })();
+            """.trimIndent()
+        )
+        val err = engine.evaluate<String>("globalThis.__mf_lastError || ''")
+        if (err.isNotEmpty()) {
+            throw IllegalStateException(err)
+        }
+        return engine.evaluate<String>("globalThis.__mf_lastResult || '{}'")
+    }
+
     suspend fun search(
         plugin: PluginMeta,
         query: String,
@@ -282,7 +310,8 @@ class MusicFreePluginRuntime(private val context: Context) {
     ): SearchResult = engineMutex.withLock {
         val engine = ensureEngine()
         appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.search('$query', $page, '$type')")
-        val raw = engine.evaluate<String>(
+        val raw = evalAsyncJson(
+            engine,
             "globalThis.__mf_search(${json.encodeToString(plugin.id)}, ${json.encodeToString(query)}, $page, ${json.encodeToString(type)})"
         )
         val root = json.parseToJsonElement(raw).jsonObject
@@ -312,7 +341,8 @@ class MusicFreePluginRuntime(private val context: Context) {
     ): MediaSourceResult = engineMutex.withLock {
         val engine = ensureEngine()
         appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.getMediaSource('${item.title}', '$quality')")
-        val raw = engine.evaluate<String>(
+        val raw = evalAsyncJson(
+            engine,
             "globalThis.__mf_getMediaSource(${json.encodeToString(plugin.id)}, ${json.encodeToString(item.rawJson)}, ${json.encodeToString(quality)})"
         )
         val obj = json.parseToJsonElement(raw).jsonObject
@@ -337,7 +367,8 @@ class MusicFreePluginRuntime(private val context: Context) {
     ): LyricResult = engineMutex.withLock {
         val engine = ensureEngine()
         appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.getLyric('${item.title}')")
-        val raw = engine.evaluate<String>(
+        val raw = evalAsyncJson(
+            engine,
             "globalThis.__mf_getLyric(${json.encodeToString(plugin.id)}, ${json.encodeToString(item.rawJson)})"
         )
         val obj = json.parseToJsonElement(raw).jsonObject
@@ -353,7 +384,8 @@ class MusicFreePluginRuntime(private val context: Context) {
     suspend fun getTopLists(plugin: PluginMeta): List<TopListGroup> = engineMutex.withLock {
         val engine = ensureEngine()
         appendLog(LogLevel.INFO, "API", "调用 ${plugin.platform}.getTopLists()")
-        val raw = engine.evaluate<String>(
+        val raw = evalAsyncJson(
+            engine,
             "globalThis.__mf_getTopLists(${json.encodeToString(plugin.id)})"
         )
         val groups = json.decodeFromString<List<TopListGroup>>(raw)
